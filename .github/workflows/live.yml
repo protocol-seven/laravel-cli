@@ -1,0 +1,156 @@
+name: Build Live
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        if [ "$GOOS" = "windows" ]; then
+          go build -ldflags="-s -w" -o laravel-${{ matrix.goos }}-${{ matrix.goarch }}.exe
+        else
+          go build -ldflags="-s -w" -o laravel-${{ matrix.goos }}-${{ matrix.goarch }}
+        fi
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: laravel-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: laravel-*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        merge-multiple: true
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          laravel-*
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download Linux AMD64 artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: laravel-linux-amd64
+        path: ./dist
+    
+    - name: Make binary executable
+      run: chmod +x ./dist/laravel-linux-amd64
+    
+    - name: Create DEB package
+      run: |
+        mkdir -p package/DEBIAN package/usr/local/bin
+        cp ./dist/laravel-linux-amd64 package/usr/local/bin/laravel
+        
+        cat > package/DEBIAN/control << EOF
+        Package: laravel-cli
+        Version: ${GITHUB_REF#refs/tags/v}
+        Section: utils
+        Priority: optional
+        Architecture: amd64
+        Maintainer: Laravel CLI <noreply@example.com>
+        Description: Laravel CLI tool for project management
+         A command-line tool for creating and managing Laravel projects.
+        EOF
+        
+        dpkg-deb --build package laravel-cli_${GITHUB_REF#refs/tags/v}_amd64.deb
+    
+    - name: Create RPM package structure
+      run: |
+        mkdir -p rpm/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+        mkdir -p rpm/SOURCES/laravel-cli-${GITHUB_REF#refs/tags/v}/usr/local/bin
+        cp ./dist/laravel-linux-amd64 rpm/SOURCES/laravel-cli-${GITHUB_REF#refs/tags/v}/usr/local/bin/laravel
+        
+        cd rpm/SOURCES
+        tar czf laravel-cli-${GITHUB_REF#refs/tags/v}.tar.gz laravel-cli-${GITHUB_REF#refs/tags/v}/
+    
+    - name: Create RPM spec file
+      run: |
+        cat > rpm/SPECS/laravel-cli.spec << EOF
+        Name:           laravel-cli
+        Version:        ${GITHUB_REF#refs/tags/v}
+        Release:        1%{?dist}
+        Summary:        Laravel CLI tool for project management
+        License:        MIT
+        URL:            https://github.com/${{ github.repository }}
+        Source0:        %{name}-%{version}.tar.gz
+        BuildArch:      x86_64
+        
+        %description
+        A command-line tool for creating and managing Laravel projects.
+        
+        %prep
+        %setup -q
+        
+        %install
+        mkdir -p %{buildroot}/usr/local/bin
+        cp usr/local/bin/laravel %{buildroot}/usr/local/bin/
+        
+        %files
+        /usr/local/bin/laravel
+        
+        %changelog
+        * $(date +'%a %b %d %Y') Builder <builder@example.com> - ${GITHUB_REF#refs/tags/v}-1
+        - Initial package
+        EOF
+    
+    - name: Install RPM build tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y rpm
+    
+    - name: Build RPM package
+      run: |
+        rpmbuild --define "_topdir $(pwd)/rpm" -ba rpm/SPECS/laravel-cli.spec
+    
+    - name: Upload DEB and RPM packages
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          laravel-cli_*.deb
+          rpm/RPMS/x86_64/*.rpm
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
