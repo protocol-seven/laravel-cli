@@ -6,7 +6,6 @@ laravel-*
 # Go
 *.test
 *.out
-go.sum
 
 # IDE
 .vscode/
