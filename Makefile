@@ -16,6 +16,55 @@ clean: ## Clean build artifacts
 test: ## Run tests
 	go test -v ./...
 
+# Run tests in the tests directory only
+test-matrix: ## Run the comprehensive test matrix
+	go test -v ./tests/...
+
+# Run specific test categories
+test-flags: ## Test command-line flags
+	go test -v ./tests/ -run TestCommandFlags
+
+test-validation: ## Test input validation
+	go test -v ./tests/ -run TestProjectValidation
+
+test-database: ## Test database functionality
+	go test -v ./tests/ -run TestDatabaseConfiguration
+
+test-starterkits: ## Test starter kits
+	go test -v ./tests/ -run TestStarterKits
+
+test-git: ## Test Git operations
+	go test -v ./tests/ -run TestGitOperations
+
+test-env: ## Test environment file operations
+	go test -v ./tests/ -run TestEnvironmentFileOperations
+
+test-interactive: ## Test interactive features
+	go test -v ./tests/ -run "Test.*Port.*|Test.*Input.*"
+
+test-utils: ## Test utility functions
+	go test -v ./tests/ -run TestUtilityFunctions
+
+test-integration: ## Test integration scenarios
+	go test -v ./tests/ -run TestIntegrationScenarios
+
+# Run tests with coverage
+test-coverage: ## Run tests with coverage report
+	go test -v -cover ./...
+	go test -v -cover ./tests/...
+
+# Run only unit tests (excluding integration tests)
+test-unit: ## Run unit tests only
+	go test -v ./tests/ -run "Test.*" -skip "Integration"
+
+# Run only integration tests
+test-integration-only: ## Run integration tests only
+	go test -v ./tests/ -run "TestIntegration.*"
+
+# Run original main tests
+test-main: ## Run tests in main package
+	go test -v .
+
 # Install locally
 install: build ## Install the binary to /usr/local/bin
 	sudo cp $(BINARY_NAME) /usr/local/bin/
