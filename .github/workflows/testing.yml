@@ -1,12 +1,11 @@
-name: Build and Release
+name: Build (Staging)
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*-rc*'
   pull_request:
     branches: [ main ]
-  workflow_dispatch:
 
 jobs:
   build:
