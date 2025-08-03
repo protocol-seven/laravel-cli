@@ -22,3 +22,7 @@ package/
 *.deb
 *.rpm
 *.tar.gz
+
+# AI
+.context/
+.reference/
